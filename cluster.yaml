@@ -91,7 +91,7 @@ nodeGroups:
         cloudWatch: true
     ssh:
       allow: true
-      publicKeyName: talkable
+      publicKeyName: keypar
     availabilityZones: ["us-east-1c", "us-east-1e"]
     labels:
       nodegroup-type: "worker-node"
@@ -150,7 +150,7 @@ nodeGroups:
       spotAllocationStrategy: "capacity-optimized"
     ssh: # use existing EC2 key but don't allow SSH access to nodegroup (security group is not created to allow SSH access).
       allow: true
-      publicKeyName: talkable
+      publicKeyName: keypar
     asgMetricsCollection:
       - granularity: 1Minute
         metrics:
@@ -218,7 +218,7 @@ nodeGroups:
         cloudWatch: true
     ssh:
       allow: true
-      publicKeyName: talkable
+      publicKeyName: keypar
     availabilityZones: ["us-east-1c", "us-east-1e", "us-east-1f"]
     labels:
       nodegroup-type: "console-node"
@@ -291,7 +291,7 @@ nodeGroups:
       spotAllocationStrategy: "capacity-optimized-prioritized"
     ssh: # use existing EC2 key but don't allow SSH access to nodegroup (security group is not created to allow SSH access).
       allow: true
-      publicKeyName: talkable
+      publicKeyName: keypar
     availabilityZones: ["us-east-1c"]
     labels:
       nodegroup-type: "proxy-node"
