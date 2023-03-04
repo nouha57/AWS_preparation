@@ -1,0 +1,318 @@
+---
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: talkable-production-eks-123
+  region: us-east-1
+  version: "1.23"
+  tags:
+    env: production
+
+vpc:
+  id: "vpc-028188ee585030c66"
+  subnets:
+    private:
+      us-east-1f: { id: subnet-0bda1e9cbe90e631e }
+      us-east-1e: { id: subnet-0015c6dc2e70ff93f }
+      us-east-1c: { id: subnet-039efca5dbf232f02 }
+  clusterEndpoints:
+    privateAccess: true
+    publicAccess: true
+  publicAccessCIDRs: ["116.203.159.143/32", "35.158.22.146/32", "52.6.41.1/32", "184.73.206.68/32"]
+
+cloudWatch:
+  clusterLogging:
+    # enable specific types of cluster control plane logs
+    enableTypes: ["*"]
+    # all supported types: "api", "audit", "authenticator", "controllerManager", "scheduler"
+    # supported special values: "*" and "all"
+
+    # Sets the number of days to retain the logs for (see [CloudWatch docs](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutRetentionPolicy.html#API_PutRetentionPolicy_RequestSyntax)).
+    # By default, log data is stored in CloudWatch Logs indefinitely.
+    logRetentionInDays: 120
+
+secretsEncryption:
+  keyARN: arn:aws:kms:us-east-1:142980311878:key/47b69d98-70be-4c63-a25c-fbbbd1192387
+
+iam:
+  withOIDC: true
+  serviceAccounts:
+    - metadata:
+        name: cluster-autoscaler
+        # if no namespace is set, "default" will be used;
+        # the namespace will be created if it doesn't exist already
+        namespace: kube-system
+        labels: { aws-usage: "cluster-ops" }
+      attachPolicy: # inline policy can be defined along with `attachPolicyARNs`
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "autoscaling:DescribeAutoScalingGroups"
+              - "autoscaling:DescribeAutoScalingInstances"
+              - "autoscaling:DescribeLaunchConfigurations"
+              - "autoscaling:DescribeTags"
+              - "autoscaling:SetDesiredCapacity"
+              - "autoscaling:TerminateInstanceInAutoScalingGroup"
+              - "ec2:DescribeInstanceTypes"
+              - "ec2:DescribeLaunchTemplateVersions"
+            Resource: '*'
+
+nodeGroups:
+  - name: production-on-demand-123
+    ami: ami-0727fb78d1259d032
+    amiFamily: AmazonLinux2
+    instancePrefix: production
+    instanceName: node-on-demand-eks-123
+    instanceType: c5.4xlarge
+    minSize: 4
+    maxSize: 25
+    desiredCapacity: 5
+    volumeSize: 300
+    volumeType: gp2
+    volumeEncrypted: true
+    volumeKmsKeyID: 47b69d98-70be-4c63-a25c-fbbbd1192387
+    privateNetworking: true
+    securityGroups:
+      attachIDs: [sg-00acd5c71243ec3c6]
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AutoScalingReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::223917973023:policy/ec2+s3+cf
+        - arn:aws:iam::223917973023:policy/SecretsManagerProductionRead
+        - arn:aws:iam::223917973023:policy/ProdSQS
+      withAddonPolicies:
+        awsLoadBalancerController: true
+        autoScaler: true
+        cloudWatch: true
+    ssh:
+      allow: true
+      publicKeyName: talkable
+    availabilityZones: ["us-east-1c", "us-east-1e"]
+    labels:
+      nodegroup-type: "worker-node"
+      lifecycle: normal
+      intent: apps
+      aws.amazon.com/spot: "false"
+      NODE_LABELS: "talkable-production-eks-123"
+    preBootstrapCommands:
+      - "yum update -y"
+      - "yum install -y libgcrypt"
+    overrideBootstrapCommand: |
+      #!/bin/bash
+      source /var/lib/cloud/scripts/eksctl/bootstrap.helper.sh
+      /etc/eks/bootstrap.sh talkable-production-eks-123 --container-runtime containerd --kubelet-extra-args "--node-labels=${NODE_LABELS}"
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/lifecycle: normal
+      k8s.io/cluster-autoscaler/node-template/label/intent: apps
+      nodegroup-type: "worker-node"
+      # EC2 tags required for cluster-autoscaler auto-discovery
+      k8s.io/cluster-autoscaler/enabled: "false"
+      k8s.io/cluster-autoscaler/talkable-production-eks-123: "owned"
+
+  - name: production-spot-123
+    ami: ami-0727fb78d1259d032
+    amiFamily: AmazonLinux2
+    instancePrefix: production
+    instanceName: node-spot-eks-123
+    minSize: 3
+    maxSize: 6
+    desiredCapacity: 3
+    volumeSize: 300
+    volumeType: gp2
+    volumeEncrypted: true
+    volumeKmsKeyID: 47b69d98-70be-4c63-a25c-fbbbd1192387
+    privateNetworking: true # if only 'Private' subnets are given, this must be enabled
+    securityGroups:
+      attachIDs: [sg-00acd5c71243ec3c6]
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AutoScalingReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::223917973023:policy/ec2+s3+cf
+        - arn:aws:iam::223917973023:policy/SecretsManagerProductionRead
+        - arn:aws:iam::223917973023:policy/ProdSQS
+      withAddonPolicies:
+        autoScaler: true
+        cloudWatch: true
+        awsLoadBalancerController: true
+    instancesDistribution:
+      maxPrice: 0.997
+      instanceTypes: ["c5.2xlarge", "c4.2xlarge", "c5.xlarge"]
+      onDemandBaseCapacity: 0
+      onDemandPercentageAboveBaseCapacity: 0
+      spotAllocationStrategy: "capacity-optimized"
+    ssh: # use existing EC2 key but don't allow SSH access to nodegroup (security group is not created to allow SSH access).
+      allow: true
+      publicKeyName: talkable
+    asgMetricsCollection:
+      - granularity: 1Minute
+        metrics:
+          - GroupMinSize
+          - GroupMaxSize
+          - GroupDesiredCapacity
+          - GroupInServiceInstances
+          - GroupPendingInstances
+          - GroupStandbyInstances
+          - GroupTerminatingInstances
+          - GroupTotalInstances
+    labels:
+      nodegroup-type: "sidekiq-node"
+      lifecycle: Ec2Spot
+      spot: "true"
+      intent: apps
+      aws.amazon.com/spot: "true"
+      NODE_LABELS: "talkable-production-eks-123"
+    preBootstrapCommands:
+      - "yum update -y"
+      - "yum install -y libgcrypt"
+    overrideBootstrapCommand: |
+      #!/bin/bash
+      source /var/lib/cloud/scripts/eksctl/bootstrap.helper.sh
+      /etc/eks/bootstrap.sh talkable-production-eks-123 --container-runtime containerd --kubelet-extra-args "--node-labels=${NODE_LABELS}"
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/lifecycle: Ec2Spot
+      k8s.io/cluster-autoscaler/node-template/label/intent: apps
+      aws.amazon.com/spot: "true"
+      nodegroup-type: "sidekiq-node"
+      # EC2 tags required for cluster-autoscaler auto-discovery
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/talkable-production-eks-123: "owned"
+
+  - name: production-console-123
+    ami: ami-0727fb78d1259d032
+    amiFamily: AmazonLinux2
+    instancePrefix: production
+    instanceName: node-console-eks-123
+    instanceType: t3.medium
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    volumeSize: 100
+    volumeType: gp2
+    volumeEncrypted: true
+    volumeKmsKeyID: 47b69d98-70be-4c63-a25c-fbbbd1192387
+    privateNetworking: true # if only 'Private' subnets are given, this must be enabled
+    securityGroups:
+      attachIDs: [sg-00acd5c71243ec3c6]
+    updateConfig:
+      maxUnavailable: 1
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AutoScalingReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::223917973023:policy/ec2+s3+cf
+        - arn:aws:iam::223917973023:policy/SecretsManagerProductionRead
+        - arn:aws:iam::223917973023:policy/ProdSQS
+      withAddonPolicies:
+        awsLoadBalancerController: true
+        autoScaler: true
+        cloudWatch: true
+    ssh:
+      allow: true
+      publicKeyName: talkable
+    availabilityZones: ["us-east-1c", "us-east-1e", "us-east-1f"]
+    labels:
+      nodegroup-type: "console-node"
+      lifecycle: normal
+      intent: console
+      spot: "false"
+      component: console
+      aws.amazon.com/spot: "true"
+      NODE_LABELS: "talkable-production-eks-123"
+    preBootstrapCommands:
+      - "yum update -y"
+      - "yum install -y libgcrypt"
+    overrideBootstrapCommand: |
+      #!/bin/bash
+      source /var/lib/cloud/scripts/eksctl/bootstrap.helper.sh
+      /etc/eks/bootstrap.sh talkable-production-eks-123 --container-runtime containerd --kubelet-extra-args "--node-labels=${NODE_LABELS}"
+    tags:
+      aws.amazon.com/spot: "false"
+      k8s.io/cluster-autoscaler/node-template/label/lifecycle: normal
+      k8s.io/cluster-autoscaler/node-template/label/intent: console
+      k8s.io/cluster-autoscaler/talkable-production-eks-123: "owned"
+      nodegroup-type: "console-node"
+
+  - name: production-proxy-123
+    ami: ami-0727fb78d1259d032
+    amiFamily: AmazonLinux2
+    instancePrefix: production
+    instanceName: node-proxy-123
+    minSize: 1
+    maxSize: 5
+    desiredCapacity: 1
+    volumeSize: 50
+    volumeType: gp3
+    volumeEncrypted: true
+    volumeKmsKeyID: 47b69d98-70be-4c63-a25c-fbbbd1192387
+    privateNetworking: true # if only 'Private' subnets are given, this must be enabled
+    #    subnets:
+    #      - us-east-1b
+    securityGroups:
+      attachIDs: [sg-0518f80214f807f6e]
+    #    classicLoadBalancerNames:
+    #      - Production-proxy-vpc
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AutoScalingReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::223917973023:policy/SecretsManagerProxyProdRead
+      withAddonPolicies:
+        autoScaler: true
+        cloudWatch: true
+        awsLoadBalancerController: true
+    asgMetricsCollection:
+      - granularity: 1Minute
+        metrics:
+          - GroupMinSize
+          - GroupMaxSize
+          - GroupDesiredCapacity
+          - GroupInServiceInstances
+          - GroupPendingInstances
+          - GroupStandbyInstances
+          - GroupTerminatingInstances
+          - GroupTotalInstances
+    instancesDistribution:
+      maxPrice: 0.997
+      instanceTypes: [ "t3.medium", "t3.small", "c4.large"] # At least one instance type should be specified
+      onDemandBaseCapacity: 0
+      onDemandPercentageAboveBaseCapacity: 0
+      spotAllocationStrategy: "capacity-optimized-prioritized"
+    ssh: # use existing EC2 key but don't allow SSH access to nodegroup (security group is not created to allow SSH access).
+      allow: true
+      publicKeyName: talkable
+    availabilityZones: ["us-east-1c"]
+    labels:
+      nodegroup-type: "proxy-node"
+      lifecycle: Ec2Spot
+      spot: "true"
+      intent: apps
+      aws.amazon.com/spot: "true"
+      NODE_LABELS: "talkable-production-eks-123"
+    preBootstrapCommands:
+      - "yum update -y"
+      - "yum install -y libgcrypt"
+    overrideBootstrapCommand: |
+      #!/bin/bash
+      set -ex
+      source /var/lib/cloud/scripts/eksctl/bootstrap.helper.sh
+      /etc/eks/bootstrap.sh talkable-production-eks-123 --container-runtime containerd --kubelet-extra-args "--node-labels=${NODE_LABELS}"
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/lifecycle: Ec2Spot
+      k8s.io/cluster-autoscaler/node-template/label/intent: apps
+      aws.amazon.com/spot: "true"
+      # EC2 tags required for cluster-autoscaler auto-discovery
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/talkable-production-eks-123: "owned"
