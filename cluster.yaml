@@ -13,8 +13,8 @@ vpc:
   id: "vpc-028188ee585030c66"
   subnets:
     private:
-      us-east-1f: { id: subnet-0bda1e9cbe90e631e }
-      us-east-1e: { id: subnet-0015c6dc2e70ff93f }
+      us-east-1a: { id: subnet-0bda1e9cbe90e631e }
+      us-east-1b: { id: subnet-0015c6dc2e70ff93f }
       us-east-1c: { id: subnet-039efca5dbf232f02 }
   clusterEndpoints:
     privateAccess: true
@@ -92,7 +92,7 @@ nodeGroups:
     ssh:
       allow: true
       publicKeyName: keypar
-    availabilityZones: ["us-east-1c", "us-east-1e"]
+    availabilityZones: ["us-east-1a", "us-east-1b"]
     labels:
       nodegroup-type: "worker-node"
       lifecycle: normal
@@ -219,7 +219,7 @@ nodeGroups:
     ssh:
       allow: true
       publicKeyName: keypar
-    availabilityZones: ["us-east-1c", "us-east-1e", "us-east-1f"]
+    availabilityZones: ["us-east-1a", "us-east-1b", "us-east-1c"]
     labels:
       nodegroup-type: "console-node"
       lifecycle: normal
